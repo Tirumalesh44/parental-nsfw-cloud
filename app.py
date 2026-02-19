@@ -9,38 +9,52 @@ import os
 
 app = FastAPI(title="Parental Control Backend")
 
-# Create tables
+# Create DB tables
 Base.metadata.create_all(bind=engine)
 
 HF_TOKEN = os.getenv("HF_TOKEN")
+
 HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_image_detection"
 
 SEXUAL_THRESHOLD = 0.6
 
-headers = {
-    "Authorization": f"Bearer {HF_TOKEN}"
-}
+
+# ================= HUGGINGFACE CALL =================
 
 def analyze_with_hf(image_bytes: bytes):
+
     try:
         response = requests.post(
             HF_API_URL,
-            headers=headers,
+            headers={
+                "Authorization": f"Bearer {HF_TOKEN}",
+                "Content-Type": "application/octet-stream"
+            },
             data=image_bytes,
             timeout=60
         )
     except requests.exceptions.RequestException as e:
-        return {"error": str(e)}
+        return {"error": f"Network error: {str(e)}"}
+
+    # Debug print (check Render logs)
+    print("HF STATUS:", response.status_code)
+    print("HF RAW RESPONSE:", response.text[:300])
 
     try:
         data = response.json()
-    except:
-        return {"error": "Invalid JSON response"}
+    except Exception:
+        return {
+            "error": "Invalid JSON response",
+            "raw": response.text[:300]
+        }
 
     if isinstance(data, dict) and "error" in data:
         return {"error": data["error"]}
 
     return data
+
+
+# ================= ANALYZE FRAME =================
 
 @app.post("/analyze-frame")
 async def analyze_frame(file: UploadFile = File(...)):
@@ -49,6 +63,7 @@ async def analyze_frame(file: UploadFile = File(...)):
 
     hf_result = analyze_with_hf(contents)
 
+    # If HF returned error
     if isinstance(hf_result, dict) and "error" in hf_result:
         return {
             "categories": [],
@@ -88,12 +103,16 @@ async def analyze_frame(file: UploadFile = File(...)):
         "timestamp": now
     }
 
+
+# ================= SUMMARY =================
+
 @app.get("/parent-summary")
 def parent_summary():
     db: Session = SessionLocal()
     total = db.query(Detection).count()
     db.close()
     return {"total_bad_frames": total}
+
 
 @app.get("/")
 def health():
