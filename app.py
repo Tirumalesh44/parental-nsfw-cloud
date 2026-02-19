@@ -1,15 +1,133 @@
-from fastapi import FastAPI, File, UploadFile
+# from fastapi import FastAPI, File, UploadFile
+# from sqlalchemy.orm import Session
+# from database import engine, SessionLocal
+# from models import Base, Detection
+# from datetime import datetime
+# import json
+# import requests
+# import os
+
+# app = FastAPI(title="Parental Control Backend")
+
+# # Create DB tables
+# Base.metadata.create_all(bind=engine)
+
+# HF_TOKEN = os.getenv("HF_TOKEN")
+
+# HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_image_detection"
+
+# SEXUAL_THRESHOLD = 0.6
+
+
+# # ================= HUGGINGFACE CALL =================
+
+# def analyze_with_hf(image_bytes: bytes):
+
+#     try:
+#         response = requests.post(
+#             HF_API_URL,
+#             headers={
+#                 "Authorization": f"Bearer {HF_TOKEN}",
+#                 "Content-Type": "application/octet-stream"
+#             },
+#             data=image_bytes,
+#             timeout=60
+#         )
+#     except requests.exceptions.RequestException as e:
+#         return {"error": f"Network error: {str(e)}"}
+
+#     # Debug print (check Render logs)
+#     print("HF STATUS:", response.status_code)
+#     print("HF RAW RESPONSE:", response.text[:300])
+
+#     try:
+#         data = response.json()
+#     except Exception:
+#         return {
+#             "error": "Invalid JSON response",
+#             "raw": response.text[:300]
+#         }
+
+#     if isinstance(data, dict) and "error" in data:
+#         return {"error": data["error"]}
+
+#     return data
+
+
+# # ================= ANALYZE FRAME =================
+
+# @app.post("/analyze-frame")
+# async def analyze_frame(file: UploadFile = File(...)):
+
+#     contents = await file.read()
+
+#     hf_result = analyze_with_hf(contents)
+
+#     # If HF returned error
+#     if isinstance(hf_result, dict) and "error" in hf_result:
+#         return {
+#             "categories": [],
+#             "sexual_score": 0.0,
+#             "hf_error": hf_result["error"],
+#             "timestamp": datetime.utcnow().isoformat()
+#         }
+
+#     sexual_score = 0.0
+
+#     if isinstance(hf_result, list):
+#         for item in hf_result:
+#             if item["label"].lower() == "nsfw":
+#                 sexual_score = item["score"]
+
+#     categories = []
+#     if sexual_score >= SEXUAL_THRESHOLD:
+#         categories.append("sexual")
+
+#     now = datetime.utcnow().isoformat()
+
+#     if categories:
+#         db: Session = SessionLocal()
+#         detection = Detection(
+#             timestamp=now,
+#             sexual_score=sexual_score,
+#             violent_score=0.0,
+#             categories=json.dumps(categories)
+#         )
+#         db.add(detection)
+#         db.commit()
+#         db.close()
+
+#     return {
+#         "categories": categories,
+#         "sexual_score": round(sexual_score, 3),
+#         "timestamp": now
+#     }
+
+
+# # ================= SUMMARY =================
+
+# @app.get("/parent-summary")
+# def parent_summary():
+#     db: Session = SessionLocal()
+#     total = db.query(Detection).count()
+#     db.close()
+#     return {"total_bad_frames": total}
+
+
+# @app.get("/")
+# def health():
+#     return {"status": "Backend Running"}
+from fastapi import FastAPI, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
 from models import Base, Detection
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import requests
 import os
 
 app = FastAPI(title="Parental Control Backend")
 
-# Create DB tables
 Base.metadata.create_all(bind=engine)
 
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -19,10 +137,11 @@ HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_i
 SEXUAL_THRESHOLD = 0.6
 
 
-# ================= HUGGINGFACE CALL =================
+# ===========================
+# HUGGINGFACE ANALYSIS
+# ===========================
 
 def analyze_with_hf(image_bytes: bytes):
-
     try:
         response = requests.post(
             HF_API_URL,
@@ -33,44 +152,25 @@ def analyze_with_hf(image_bytes: bytes):
             data=image_bytes,
             timeout=60
         )
-    except requests.exceptions.RequestException as e:
-        return {"error": f"Network error: {str(e)}"}
-
-    # Debug print (check Render logs)
-    print("HF STATUS:", response.status_code)
-    print("HF RAW RESPONSE:", response.text[:300])
-
-    try:
-        data = response.json()
-    except Exception:
-        return {
-            "error": "Invalid JSON response",
-            "raw": response.text[:300]
-        }
-
-    if isinstance(data, dict) and "error" in data:
-        return {"error": data["error"]}
-
-    return data
+        return response.json()
+    except Exception as e:
+        print("HF ERROR:", str(e))
+        return []
 
 
-# ================= ANALYZE FRAME =================
+# ===========================
+# ANALYZE FRAME
+# ===========================
 
 @app.post("/analyze-frame")
-async def analyze_frame(file: UploadFile = File(...)):
+async def analyze_frame(
+    device_id: str = Form(...),
+    file: UploadFile = File(...)
+):
 
     contents = await file.read()
 
     hf_result = analyze_with_hf(contents)
-
-    # If HF returned error
-    if isinstance(hf_result, dict) and "error" in hf_result:
-        return {
-            "categories": [],
-            "sexual_score": 0.0,
-            "hf_error": hf_result["error"],
-            "timestamp": datetime.utcnow().isoformat()
-        }
 
     sexual_score = 0.0
 
@@ -83,16 +183,19 @@ async def analyze_frame(file: UploadFile = File(...)):
     if sexual_score >= SEXUAL_THRESHOLD:
         categories.append("sexual")
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.utcnow()
 
     if categories:
         db: Session = SessionLocal()
+
         detection = Detection(
-            timestamp=now,
+            device_id=device_id,
+            timestamp=now.isoformat(),
             sexual_score=sexual_score,
             violent_score=0.0,
             categories=json.dumps(categories)
         )
+
         db.add(detection)
         db.commit()
         db.close()
@@ -100,18 +203,64 @@ async def analyze_frame(file: UploadFile = File(...)):
     return {
         "categories": categories,
         "sexual_score": round(sexual_score, 3),
-        "timestamp": now
+        "timestamp": now.isoformat()
     }
 
 
-# ================= SUMMARY =================
+# ===========================
+# PARENT SUMMARY
+# ===========================
 
 @app.get("/parent-summary")
-def parent_summary():
+def parent_summary(device_id: str):
+
     db: Session = SessionLocal()
-    total = db.query(Detection).count()
+
+    total_bad_frames = db.query(Detection).filter(
+        Detection.device_id == device_id
+    ).count()
+
+    detections = db.query(Detection).filter(
+        Detection.device_id == device_id
+    ).all()
+
     db.close()
-    return {"total_bad_frames": total}
+
+    total_bad_watch_time_seconds = len(detections) * 5  # assuming 5 sec capture
+
+    return {
+        "total_bad_frames": total_bad_frames,
+        "estimated_watch_time_seconds": total_bad_watch_time_seconds
+    }
+
+
+# ===========================
+# ACTIVE INCIDENT
+# ===========================
+
+@app.get("/active-incident")
+def active_incident(device_id: str):
+
+    db: Session = SessionLocal()
+
+    last_detection = db.query(Detection).filter(
+        Detection.device_id == device_id
+    ).order_by(Detection.id.desc()).first()
+
+    db.close()
+
+    if not last_detection:
+        return {"active": False}
+
+    last_time = datetime.fromisoformat(last_detection.timestamp)
+
+    if datetime.utcnow() - last_time < timedelta(seconds=20):
+        return {
+            "active": True,
+            "last_detected_at": last_detection.timestamp
+        }
+
+    return {"active": False}
 
 
 @app.get("/")
