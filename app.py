@@ -755,24 +755,34 @@ def get_incidents(device_id: str):
         .all()
     )
 
+    now = datetime.utcnow()
+
     result = []
 
-    for i in incidents:
-        duration = None
-        if i.ended_at:
+    for inc in incidents:
+
+        if inc.ended_at:
             duration = (
-                datetime.fromisoformat(i.ended_at) -
-                datetime.fromisoformat(i.started_at)
+                datetime.fromisoformat(inc.ended_at) -
+                datetime.fromisoformat(inc.started_at)
+            ).total_seconds()
+        else:
+            duration = (
+                now -
+                datetime.fromisoformat(inc.started_at)
             ).total_seconds()
 
         result.append({
-            "started_at": i.started_at,
-            "ended_at": i.ended_at,
-            "peak_risk": round(i.peak_risk, 2),
-            "status": i.status,
-            "duration_seconds": int(duration) if duration else None
+            "started_at": inc.started_at,
+            "ended_at": inc.ended_at,
+            "peak_risk": round(inc.peak_risk, 2),
+            "status": inc.status,
+            "duration_seconds": int(duration)
         })
 
     db.close()
 
-    return {"incidents": result}
+    return {
+        "incident_count": len(result),
+        "incidents": result
+    }
