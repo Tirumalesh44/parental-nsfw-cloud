@@ -534,7 +534,8 @@ async def analyze_frame(
         categories.append("sexual")
 
     now = datetime.utcnow()
-
+    print("Sexual score:", sexual_score)
+    print("Categories:", categories)
     if categories:
         db: Session = SessionLocal()
 
