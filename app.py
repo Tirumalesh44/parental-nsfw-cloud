@@ -741,3 +741,38 @@ def app_event(data: dict = Body(...)):
     print("App Opened:", package_name)
 
     return {"status": "received"}
+
+#-------INCIDENTS-------#
+@app.get("/incidents/{device_id}")
+def get_incidents(device_id: str):
+
+    db: Session = SessionLocal()
+
+    incidents = (
+        db.query(Incident)
+        .filter(Incident.device_id == device_id)
+        .order_by(Incident.started_at.desc())
+        .all()
+    )
+
+    result = []
+
+    for i in incidents:
+        duration = None
+        if i.ended_at:
+            duration = (
+                datetime.fromisoformat(i.ended_at) -
+                datetime.fromisoformat(i.started_at)
+            ).total_seconds()
+
+        result.append({
+            "started_at": i.started_at,
+            "ended_at": i.ended_at,
+            "peak_risk": round(i.peak_risk, 2),
+            "status": i.status,
+            "duration_seconds": int(duration) if duration else None
+        })
+
+    db.close()
+
+    return {"incidents": result}
