@@ -476,6 +476,9 @@ from datetime import datetime, timedelta
 import json
 import requests
 import os
+from models import Detection, Incident
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
 
 app = FastAPI(title="Parental Control Backend")
 
@@ -596,7 +599,6 @@ def active_status(device_id: str):
 # =====================================
 # PROFESSIONAL INCIDENT RISK ENGINE
 # =====================================
-
 @app.get("/risk/{device_id}")
 def risk_score(device_id: str):
 
@@ -614,39 +616,91 @@ def risk_score(device_id: str):
         .all()
     )
 
-    db.close()
+    # -------- CALCULATE RISK -------- #
 
     if not recent_detections:
+        # If no recent detections, close active incident if exists
+        active_incident = (
+            db.query(Incident)
+            .filter(
+                Incident.device_id == device_id,
+                Incident.status == "ACTIVE"
+            )
+            .first()
+        )
+
+        if active_incident:
+            active_incident.status = "CLOSED"
+            active_incident.ended_at = now.isoformat()
+            db.commit()
+
+        db.close()
+
         return {
             "risk_score": 0,
             "risk_level": "SAFE",
             "incident_active": False
         }
 
-    scores = [d.sexual_score for d in recent_detections]
-    max_score = max(scores)
-    avg_score = sum(scores) / len(scores)
+    detection_count = len(recent_detections)
+    avg_score = sum(d.sexual_score for d in recent_detections) / detection_count
 
-    # Direct HIGH override
-    if max_score >= 0.8:
-        return {
-            "risk_score": round(max_score * 100, 2),
-            "risk_level": "HIGH",
-            "incident_active": True
-        }
+    timestamps = [datetime.fromisoformat(d.timestamp) for d in recent_detections]
+    session_duration = (max(timestamps) - min(timestamps)).total_seconds()
 
-    # Medium detection
-    if max_score >= 0.5:
+    risk_score = (
+        detection_count * 10 +
+        avg_score * 50 +
+        session_duration * 0.5
+    )
+
+    # -------- CLASSIFY -------- #
+
+    if risk_score > 80:
+        level = "CRITICAL"
+    elif risk_score > 50:
+        level = "HIGH"
+    elif risk_score > 25:
         level = "MEDIUM"
-    elif max_score >= 0.15:
-        level = "LOW"
     else:
-        level = "SAFE"
+        level = "LOW"
+
+    # -------- INCIDENT MANAGEMENT -------- #
+
+    active_incident = (
+        db.query(Incident)
+        .filter(
+            Incident.device_id == device_id,
+            Incident.status == "ACTIVE"
+        )
+        .first()
+    )
+
+    if not active_incident and level in ["MEDIUM", "HIGH", "CRITICAL"]:
+        # Start new incident
+        new_incident = Incident(
+            device_id=device_id,
+            started_at=now.isoformat(),
+            peak_risk=risk_score,
+            status="ACTIVE"
+        )
+        db.add(new_incident)
+        db.commit()
+
+    elif active_incident:
+        # Update peak risk if higher
+        if risk_score > active_incident.peak_risk:
+            active_incident.peak_risk = risk_score
+            db.commit()
+
+    db.close()
 
     return {
-        "risk_score": round(avg_score * 100, 2),
+        "risk_score": round(risk_score, 2),
         "risk_level": level,
-        "incident_active": level != "SAFE"
+        "incident_active": True,
+        "detections_last_30s": detection_count,
+        "session_duration_seconds": int(session_duration)
     }
 # =====================================
 # SUMMARY
