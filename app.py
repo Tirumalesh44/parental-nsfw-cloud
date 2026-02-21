@@ -273,6 +273,201 @@
 
 
 #----------THIRD---------#
+# from fastapi import FastAPI, File, UploadFile, Form
+# from sqlalchemy.orm import Session
+# from database import engine, SessionLocal
+# from models import Base, Detection
+# from datetime import datetime, timedelta
+# import json
+# import requests
+# import os
+
+# app = FastAPI(title="Parental Control Backend")
+
+# Base.metadata.create_all(bind=engine)
+
+# HF_TOKEN = os.getenv("HF_TOKEN")
+
+# HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_image_detection"
+
+# SEXUAL_THRESHOLD = 0.2
+
+
+# # =====================================
+# # HUGGINGFACE ANALYSIS
+# # =====================================
+
+# def analyze_with_hf(image_bytes: bytes):
+#     try:
+#         response = requests.post(
+#             HF_API_URL,
+#             headers={
+#                 "Authorization": f"Bearer {HF_TOKEN}",
+#                 "Content-Type": "application/octet-stream"
+#             },
+#             data=image_bytes,
+#             timeout=60
+#         )
+#         return response.json()
+#     except Exception as e:
+#         print("HF ERROR:", str(e))
+#         return []
+
+
+# # =====================================
+# # ANALYZE FRAME
+# # =====================================
+
+# @app.post("/analyze-frame")
+# async def analyze_frame(
+#     device_id: str = Form(...),
+#     file: UploadFile = File(...)
+# ):
+
+#     contents = await file.read()
+#     hf_result = analyze_with_hf(contents)
+
+#     sexual_score = 0.0
+
+#     if isinstance(hf_result, list):
+#         for item in hf_result:
+#             if item["label"].lower() == "nsfw":
+#                 sexual_score = item["score"]
+
+#     categories = []
+#     if sexual_score >= SEXUAL_THRESHOLD:
+#         categories.append("sexual")
+
+#     now = datetime.utcnow()
+
+#     if categories:
+#         db: Session = SessionLocal()
+
+#         detection = Detection(
+#             device_id=device_id,
+#             timestamp=now.isoformat(),
+#             sexual_score=sexual_score,
+#             violent_score=0.0,
+#             categories=json.dumps(categories)
+#         )
+
+#         db.add(detection)
+#         db.commit()
+#         db.close()
+
+#     return {
+#         "categories": categories,
+#         "sexual_score": round(sexual_score, 3),
+#         "timestamp": now.isoformat()
+#     }
+
+
+# # =====================================
+# # SMART ACTIVE INCIDENT (UPGRADED)
+# # =====================================
+
+# @app.get("/active/{device_id}")
+# def active_status(device_id: str):
+
+#     db: Session = SessionLocal()
+
+#     detections = (
+#         db.query(Detection)
+#         .filter(Detection.device_id == device_id)
+#         .order_by(Detection.timestamp.desc())
+#         .limit(5)
+#         .all()
+#     )
+
+#     db.close()
+
+#     if len(detections) < 2:
+#         return {"active": False}
+
+#     now = datetime.utcnow()
+#     recent_count = 0
+
+#     for d in detections:
+#         ts = datetime.fromisoformat(d.timestamp)
+#         if (now - ts).total_seconds() <= 15 and d.sexual_score >= 0.3:
+#             recent_count += 1
+
+#     active = recent_count >= 2
+
+#     return {
+#         "active": active,
+#         "recent_detections": recent_count
+#     }
+
+
+# # =====================================
+# # RISK SCORING ENGINE
+# # =====================================
+
+# @app.get("/risk/{device_id}")
+# def risk_score(device_id: str):
+
+#     db: Session = SessionLocal()
+
+#     detections = (
+#         db.query(Detection)
+#         .filter(Detection.device_id == device_id)
+#         .order_by(Detection.timestamp.desc())
+#         .limit(10)
+#         .all()
+#     )
+
+#     db.close()
+
+#     if not detections:
+#         return {"risk_score": 0, "risk_level": "LOW"}
+
+#     scores = [d.sexual_score for d in detections]
+#     avg_score = sum(scores) / len(scores)
+
+#     if avg_score > 0.35:
+#         level = "HIGH"
+#     elif avg_score > 0.2:
+#         level = "MEDIUM"
+#     else:
+#         level = "LOW"
+
+#     return {
+#         "risk_score": round(avg_score * 100, 2),
+#         "risk_level": level
+#     }
+
+
+# # =====================================
+# # SUMMARY
+# # =====================================
+
+# @app.get("/summary/{device_id}")
+# def parent_summary(device_id: str):
+
+#     db: Session = SessionLocal()
+
+#     detections = db.query(Detection).filter(
+#         Detection.device_id == device_id
+#     ).all()
+
+#     db.close()
+
+#     total_bad_frames = len(detections)
+#     estimated_watch_time_seconds = total_bad_frames * 5
+
+#     return {
+#         "total_bad_frames": total_bad_frames,
+#         "estimated_watch_time_seconds": estimated_watch_time_seconds
+#     }
+
+
+# @app.get("/")
+# def health():
+#     return {"status": "Backend Running"}
+
+
+#-------FOURTH------------#
 from fastapi import FastAPI, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
@@ -363,7 +558,7 @@ async def analyze_frame(
 
 
 # =====================================
-# SMART ACTIVE INCIDENT (UPGRADED)
+# ACTIVE INCIDENT (WINDOW BASED)
 # =====================================
 
 @app.get("/active/{device_id}")
@@ -371,37 +566,30 @@ def active_status(device_id: str):
 
     db: Session = SessionLocal()
 
-    detections = (
+    now = datetime.utcnow()
+    window_start = now - timedelta(seconds=20)
+
+    recent_detections = (
         db.query(Detection)
-        .filter(Detection.device_id == device_id)
-        .order_by(Detection.timestamp.desc())
-        .limit(5)
+        .filter(
+            Detection.device_id == device_id,
+            Detection.timestamp >= window_start.isoformat()
+        )
         .all()
     )
 
     db.close()
 
-    if len(detections) < 2:
-        return {"active": False}
-
-    now = datetime.utcnow()
-    recent_count = 0
-
-    for d in detections:
-        ts = datetime.fromisoformat(d.timestamp)
-        if (now - ts).total_seconds() <= 15 and d.sexual_score >= 0.3:
-            recent_count += 1
-
-    active = recent_count >= 2
+    active = len(recent_detections) >= 2
 
     return {
         "active": active,
-        "recent_detections": recent_count
+        "recent_detections": len(recent_detections)
     }
 
 
 # =====================================
-# RISK SCORING ENGINE
+# PROFESSIONAL INCIDENT RISK ENGINE
 # =====================================
 
 @app.get("/risk/{device_id}")
@@ -409,32 +597,55 @@ def risk_score(device_id: str):
 
     db: Session = SessionLocal()
 
-    detections = (
+    now = datetime.utcnow()
+    window_start = now - timedelta(seconds=30)
+
+    recent_detections = (
         db.query(Detection)
-        .filter(Detection.device_id == device_id)
-        .order_by(Detection.timestamp.desc())
-        .limit(10)
+        .filter(
+            Detection.device_id == device_id,
+            Detection.timestamp >= window_start.isoformat()
+        )
         .all()
     )
 
     db.close()
 
-    if not detections:
-        return {"risk_score": 0, "risk_level": "LOW"}
+    if not recent_detections:
+        return {
+            "risk_score": 0,
+            "risk_level": "SAFE",
+            "incident_active": False
+        }
 
-    scores = [d.sexual_score for d in detections]
-    avg_score = sum(scores) / len(scores)
+    detection_count = len(recent_detections)
 
-    if avg_score > 0.35:
+    avg_score = sum(d.sexual_score for d in recent_detections) / detection_count
+
+    timestamps = [datetime.fromisoformat(d.timestamp) for d in recent_detections]
+    session_duration = (max(timestamps) - min(timestamps)).total_seconds()
+
+    risk_score = (
+        detection_count * 10 +
+        avg_score * 50 +
+        session_duration * 0.5
+    )
+
+    if risk_score > 80:
+        level = "CRITICAL"
+    elif risk_score > 50:
         level = "HIGH"
-    elif avg_score > 0.2:
+    elif risk_score > 25:
         level = "MEDIUM"
     else:
         level = "LOW"
 
     return {
-        "risk_score": round(avg_score * 100, 2),
-        "risk_level": level
+        "risk_score": round(risk_score, 2),
+        "risk_level": level,
+        "incident_active": True,
+        "detections_last_30s": detection_count,
+        "session_duration_seconds": int(session_duration)
     }
 
 
