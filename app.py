@@ -290,7 +290,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 
 HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_image_detection"
 
-SEXUAL_THRESHOLD = 0.6
+SEXUAL_THRESHOLD = 0.2
 
 
 # =====================================
@@ -389,7 +389,7 @@ def active_status(device_id: str):
 
     for d in detections:
         ts = datetime.fromisoformat(d.timestamp)
-        if (now - ts).total_seconds() <= 15 and d.sexual_score >= 0.7:
+        if (now - ts).total_seconds() <= 15 and d.sexual_score >= 0.3:
             recent_count += 1
 
     active = recent_count >= 2
@@ -425,9 +425,9 @@ def risk_score(device_id: str):
     scores = [d.sexual_score for d in detections]
     avg_score = sum(scores) / len(scores)
 
-    if avg_score > 0.85:
+    if avg_score > 0.35:
         level = "HIGH"
-    elif avg_score > 0.6:
+    elif avg_score > 0.2:
         level = "MEDIUM"
     else:
         level = "LOW"
