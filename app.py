@@ -485,7 +485,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 
 HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_image_detection"
 
-SEXUAL_THRESHOLD = 0.2
+SEXUAL_THRESHOLD = 0.03
 
 
 # =====================================
@@ -530,13 +530,17 @@ async def analyze_frame(
                 sexual_score = item["score"]
 
     categories = []
-    if sexual_score >= SEXUAL_THRESHOLD:
-        categories.append("sexual")
+    if sexual_score >= 0.5:
+        categories.append("high")
+    elif sexual_score >= 0.15:
+        categories.append("medium")
+    elif sexual_score >= 0.03:
+        categories.append("low")
 
     now = datetime.utcnow()
     print("Sexual score:", sexual_score)
     print("Categories:", categories)
-    if categories:
+    if sexual_score >= 0.03:
         db: Session = SessionLocal()
 
         detection = Detection(
@@ -619,37 +623,31 @@ def risk_score(device_id: str):
             "incident_active": False
         }
 
-    detection_count = len(recent_detections)
+    scores = [d.sexual_score for d in recent_detections]
+    max_score = max(scores)
+    avg_score = sum(scores) / len(scores)
 
-    avg_score = sum(d.sexual_score for d in recent_detections) / detection_count
+    # Direct HIGH override
+    if max_score >= 0.8:
+        return {
+            "risk_score": round(max_score * 100, 2),
+            "risk_level": "HIGH",
+            "incident_active": True
+        }
 
-    timestamps = [datetime.fromisoformat(d.timestamp) for d in recent_detections]
-    session_duration = (max(timestamps) - min(timestamps)).total_seconds()
-
-    risk_score = (
-        detection_count * 10 +
-        avg_score * 50 +
-        session_duration * 0.5
-    )
-
-    if risk_score > 80:
-        level = "CRITICAL"
-    elif risk_score > 50:
-        level = "HIGH"
-    elif risk_score > 25:
+    # Medium detection
+    if max_score >= 0.5:
         level = "MEDIUM"
-    else:
+    elif max_score >= 0.15:
         level = "LOW"
+    else:
+        level = "SAFE"
 
     return {
-        "risk_score": round(risk_score, 2),
+        "risk_score": round(avg_score * 100, 2),
         "risk_level": level,
-        "incident_active": True,
-        "detections_last_30s": detection_count,
-        "session_duration_seconds": int(session_duration)
+        "incident_active": level != "SAFE"
     }
-
-
 # =====================================
 # SUMMARY
 # =====================================
@@ -677,3 +675,15 @@ def parent_summary(device_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend Running"}
+
+from fastapi import Body
+
+@app.post("/app-event")
+def app_event(data: dict = Body(...)):
+
+    device_id = data.get("device_id")
+    package_name = data.get("package_name")
+
+    print("App Opened:", package_name)
+
+    return {"status": "received"}
