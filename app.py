@@ -479,6 +479,10 @@ import os
 from models import Detection, Incident
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+import firebase_admin
+from firebase_admin import credentials, messaging
+
+
 
 app = FastAPI(title="Parental Control Backend")
 
@@ -812,3 +816,43 @@ def register_parent(device_id: str, fcm_token: str):
     db.close()
 
     return {"status": "registered"}
+
+
+def send_push(token: str, title: str, body: str):
+    try:
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+            ),
+            token=token,
+        )
+
+        response = messaging.send(message)
+        print("Push sent:", response)
+
+    except Exception as e:
+        print("Push failed:", str(e))
+
+@app.post("/test-push/{device_id}")
+def test_push(device_id: str):
+
+    db = SessionLocal()
+
+    parent = db.query(ParentDevice).filter(
+        ParentDevice.device_id == device_id
+    ).first()
+
+    if not parent:
+        db.close()
+        return {"error": "Parent device not found"}
+
+    send_push(
+        parent.fcm_token,
+        "Test Alert",
+        "Push system working"
+    )
+
+    db.close()
+
+    return {"status": "push sent"}
