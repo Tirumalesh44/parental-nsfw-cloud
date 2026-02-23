@@ -786,3 +786,29 @@ def get_incidents(device_id: str):
         "incident_count": len(result),
         "incidents": result
     }
+    
+## parent api 
+from sqlalchemy.orm import Session
+from models import ParentDevice
+@app.post("/register-parent")
+def register_parent(device_id: str, fcm_token: str):
+
+    db: Session = SessionLocal()
+
+    existing = db.query(ParentDevice).filter(
+        ParentDevice.device_id == device_id
+    ).first()
+
+    if existing:
+        existing.fcm_token = fcm_token
+    else:
+        parent = ParentDevice(
+            device_id=device_id,
+            fcm_token=fcm_token
+        )
+        db.add(parent)
+
+    db.commit()
+    db.close()
+
+    return {"status": "registered"}
