@@ -821,12 +821,12 @@ def register_parent(device_id: str, fcm_token: str):
 def send_push(token: str, title: str, body: str):
     try:
         message = messaging.Message(
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
-            token=token,
-        )
+    data={
+        "title": title,
+        "body": body,
+    },
+    token=token,
+)
 
         response = messaging.send(message)
         print("Push sent:", response)
