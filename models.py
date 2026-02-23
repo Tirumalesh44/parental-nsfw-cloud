@@ -72,3 +72,10 @@ class Incident(Base):
     peak_risk = Column(Float, nullable=False)
 
     status = Column(String, nullable=False)  # ACTIVE / CLOSED
+    
+class ParentDevice(Base):
+    __tablename__ = "parent_devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String, index=True)
+    fcm_token = Column(String, nullable=False)
