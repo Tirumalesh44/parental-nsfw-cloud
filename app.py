@@ -490,8 +490,8 @@ Base.metadata.create_all(bind=engine)
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_image_detection"
-
+# HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_image_detection"
+HF_API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
 SEXUAL_THRESHOLD = 0.03
 
 
