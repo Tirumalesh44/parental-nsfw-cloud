@@ -491,7 +491,7 @@ Base.metadata.create_all(bind=engine)
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 HF_API_URL = "https://router.huggingface.co/hf-inference/models/Falconsai/nsfw_image_detection"
-# HF_API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
+
 SEXUAL_THRESHOLD = 0.03
 
 
@@ -681,7 +681,7 @@ def risk_score(device_id: str):
     )
 
     if not active_incident and level in ["MEDIUM", "HIGH", "CRITICAL"]:
-    # Start new incident
+        # Start new incident
         new_incident = Incident(
             device_id=device_id,
             started_at=now.isoformat(),
@@ -690,20 +690,6 @@ def risk_score(device_id: str):
         )
         db.add(new_incident)
         db.commit()
-
-        # 🔥 SEND NOTIFICATION TO PARENT (THIS WAS MISSING)
-        parent = db.query(ParentDevice).filter(
-            ParentDevice.device_id == device_id
-        ).first()
-
-        if parent and parent.fcm_token:
-            send_push(
-                parent.fcm_token,
-                "⚠️ CHILD ALERT",
-                f"High risk content detected! Risk level: {level}"
-            )
-        
-        ###############
 
     elif active_incident:
         # Update peak risk if higher
@@ -835,19 +821,18 @@ def register_parent(device_id: str, fcm_token: str):
 def send_push(token: str, title: str, body: str):
     try:
         message = messaging.Message(
-            notification=messaging.Notification(   # ← THIS WAS THE MAIN MISTAKE
-                title=title,
-                body=body
-            ),
-            data={
-                "type": "incident"
-            },
-            token=token
-        )
+    data={
+        "title": title,
+        "body": body,
+    },
+    token=token,
+)
+
         response = messaging.send(message)
-        print(f"✅ PUSH SENT SUCCESSFULLY: {response}")
+        print("Push sent:", response)
+
     except Exception as e:
-        print(f"❌ Push failed: {str(e)}")
+        print("Push failed:", str(e))
 
 @app.post("/test-push/{device_id}")
 def test_push(device_id: str):
