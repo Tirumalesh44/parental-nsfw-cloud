@@ -79,3 +79,44 @@ class ParentDevice(Base):
     id = Column(Integer, primary_key=True, index=True)
     device_id = Column(String, index=True)
     fcm_token = Column(String, nullable=False)
+    
+    
+# =========================
+# APP USAGE TABLE
+# =========================
+
+class AppUsage(Base):
+    __tablename__ = "app_usage"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    device_id = Column(String, index=True, nullable=False)
+
+    package_name = Column(String, nullable=False)
+
+    started_at = Column(String, nullable=False)
+    ended_at = Column(String, nullable=False)
+
+    duration_seconds = Column(Integer, nullable=False)
+
+
+# =========================
+# DEVICE COMMAND TABLE
+# =========================
+
+class DeviceCommand(Base):
+    __tablename__ = "device_commands"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    device_id = Column(String, index=True, nullable=False)
+
+    command_type = Column(String, nullable=False)  # LOCK / UNLOCK / LIMIT
+
+    payload = Column(String, nullable=True)
+
+    status = Column(String, nullable=False)  # PENDING / EXECUTED
+
+    created_at = Column(String, nullable=False)
+
+    executed_at = Column(String, nullable=True)

@@ -891,3 +891,31 @@ def test_push(device_id: str):
     db.close()
 
     return {"status": "push sent"}
+
+
+from models import DeviceCommand
+from datetime import datetime
+from fastapi import Body
+
+@app.post("/commands/send")
+def send_command(data: dict = Body(...)):
+
+    device_id = data.get("device_id")
+    command_type = data.get("command_type")
+    payload = data.get("payload", "")
+
+    db = SessionLocal()
+
+    command = DeviceCommand(
+        device_id=device_id,
+        command_type=command_type,
+        payload=payload,
+        status="PENDING",
+        created_at=datetime.utcnow().isoformat()
+    )
+
+    db.add(command)
+    db.commit()
+    db.close()
+
+    return {"status": "command_sent"}
