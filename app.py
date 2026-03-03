@@ -919,3 +919,108 @@ def send_command(data: dict = Body(...)):
     db.close()
 
     return {"status": "command_sent"}
+
+@app.get("/commands/pending/{device_id}")
+def get_pending_command(device_id: str):
+
+    db = SessionLocal()
+
+    command = (
+        db.query(DeviceCommand)
+        .filter(
+            DeviceCommand.device_id == device_id,
+            DeviceCommand.status == "PENDING"
+        )
+        .order_by(DeviceCommand.created_at.asc())
+        .first()
+    )
+
+    if not command:
+        db.close()
+        return {"command": None}
+
+    result = {
+        "id": command.id,
+        "command_type": command.command_type,
+        "payload": command.payload
+    }
+
+    db.close()
+
+    return {"command": result}
+
+@app.post("/commands/executed")
+def command_executed(data: dict = Body(...)):
+
+    command_id = data.get("command_id")
+
+    db = SessionLocal()
+
+    command = db.query(DeviceCommand).filter(
+        DeviceCommand.id == command_id
+    ).first()
+
+    if not command:
+        db.close()
+        return {"error": "command not found"}
+
+    command.status = "EXECUTED"
+    command.executed_at = datetime.utcnow().isoformat()
+
+    db.commit()
+    db.close()
+
+    return {"status": "updated"}
+
+from models import AppUsage
+
+@app.post("/app-usage")
+def store_app_usage(data: dict = Body(...)):
+
+    device_id = data.get("device_id")
+    package_name = data.get("package_name")
+    started_at = data.get("started_at")
+    ended_at = data.get("ended_at")
+    duration_seconds = data.get("duration_seconds")
+
+    db = SessionLocal()
+
+    usage = AppUsage(
+        device_id=device_id,
+        package_name=package_name,
+        started_at=started_at,
+        ended_at=ended_at,
+        duration_seconds=duration_seconds
+    )
+
+    db.add(usage)
+    db.commit()
+    db.close()
+
+    return {"status": "usage_saved"}
+
+@app.get("/dashboard/overview/{device_id}")
+def dashboard_overview(device_id: str):
+
+    db = SessionLocal()
+
+    today = datetime.utcnow().date().isoformat()
+
+    usages = db.query(AppUsage).filter(
+        AppUsage.device_id == device_id,
+        AppUsage.started_at.startswith(today)
+    ).all()
+
+    total_screen_time = sum(u.duration_seconds for u in usages)
+
+    incidents_today = db.query(Incident).filter(
+        Incident.device_id == device_id,
+        Incident.started_at.startswith(today)
+    ).count()
+
+    db.close()
+
+    return {
+        "total_screen_time_seconds": total_screen_time,
+        "incidents_today": incidents_today
+    }
