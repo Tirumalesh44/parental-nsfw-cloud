@@ -620,10 +620,12 @@ def risk_score(device_id: str):
         .all()
     )
 
-    # -------- CALCULATE RISK -------- #
+    # -------------------------------
+    # NO RECENT DETECTIONS
+    # -------------------------------
 
     if not recent_detections:
-        # If no recent detections, close active incident if exists
+
         active_incident = (
             db.query(Incident)
             .filter(
@@ -646,6 +648,10 @@ def risk_score(device_id: str):
             "incident_active": False
         }
 
+    # -------------------------------
+    # CALCULATE RISK
+    # -------------------------------
+
     detection_count = len(recent_detections)
     avg_score = sum(d.sexual_score for d in recent_detections) / detection_count
 
@@ -658,7 +664,9 @@ def risk_score(device_id: str):
         session_duration * 0.5
     )
 
-    # -------- CLASSIFY -------- #
+    # -------------------------------
+    # CLASSIFY LEVEL
+    # -------------------------------
 
     if risk_score > 80:
         level = "CRITICAL"
@@ -669,7 +677,9 @@ def risk_score(device_id: str):
     else:
         level = "LOW"
 
-    # -------- INCIDENT MANAGEMENT -------- #
+    # -------------------------------
+    # INCIDENT MANAGEMENT
+    # -------------------------------
 
     active_incident = (
         db.query(Incident)
@@ -680,19 +690,44 @@ def risk_score(device_id: str):
         .first()
     )
 
+    # 🚨 NEW INCIDENT TRIGGER
     if not active_incident and level in ["MEDIUM", "HIGH", "CRITICAL"]:
-        # Start new incident
+
+        print("🔥 Starting new incident")
+
         new_incident = Incident(
             device_id=device_id,
             started_at=now.isoformat(),
             peak_risk=risk_score,
             status="ACTIVE"
         )
+
         db.add(new_incident)
         db.commit()
 
+        # -------------------------------
+        # FETCH PARENT TOKEN
+        # -------------------------------
+
+        parent = (
+            db.query(ParentDevice)
+            .filter(ParentDevice.device_id == "parent_device_2")
+            .first()
+        )
+
+        if parent:
+            print("📲 Sending push to parent")
+
+            send_push(
+                parent.fcm_token,
+                "⚠️ ALERT",
+                f"Risk Level: {level}"
+            )
+        else:
+            print("❌ No parent device found")
+
+    # UPDATE EXISTING INCIDENT
     elif active_incident:
-        # Update peak risk if higher
         if risk_score > active_incident.peak_risk:
             active_incident.peak_risk = risk_score
             db.commit()
