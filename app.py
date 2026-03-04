@@ -1278,33 +1278,30 @@ def unblock_app(data: dict = Body(...)):
     return {"status":"unblocked"}
 from sqlalchemy import func
 @app.get("/usage-summary/{device_id}")
-def get_usage_summary(device_id: str):
+def usage_summary(device_id: str):
 
-    db: Session = SessionLocal()
+    db = SessionLocal()
 
     rows = (
         db.query(
             AppUsage.package_name,
-            func.sum(AppUsage.duration_seconds).label("total")
+            func.sum(AppUsage.duration_seconds).label("total_seconds")
         )
         .filter(AppUsage.device_id == device_id)
         .group_by(AppUsage.package_name)
-        .order_by(func.sum(AppUsage.duration_seconds).desc())
-        .limit(5)
         .all()
     )
 
-    result = []
+    apps = []
 
     for r in rows:
-
-        result.append({
+        apps.append({
             "package_name": r.package_name,
-            "total_seconds": r.total
+            "total_seconds": r.total_seconds
         })
 
     db.close()
 
-    return {"apps": result}
+    return {"apps": apps}
 
 Base.metadata.create_all(bind=engine)
