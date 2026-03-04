@@ -476,7 +476,7 @@ from datetime import datetime, timedelta
 import json
 import requests
 import os
-from models import Detection, Incident, ParentDevice, DeviceCommand, AppUsage, ScreenLimit,BlockedApp
+from models import Detection, Incident, ParentDevice, DeviceCommand, AppUsage, ScreenLimit,BlockedApp,InstalledApp
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import firebase_admin
@@ -1178,4 +1178,46 @@ def get_blocked_apps(device_id: str):
 
     return {
         "blocked_apps": [a.package_name for a in apps]
+    }
+    
+@app.post("/installed-apps")
+def save_apps(data: dict = Body(...)):
+
+    device_id = data.get("device_id")
+    apps = data.get("apps")
+
+    db = SessionLocal()
+
+    for app in apps:
+
+        exists = db.query(InstalledApp).filter(
+            InstalledApp.device_id==device_id,
+            InstalledApp.package_name==app
+        ).first()
+
+        if not exists:
+
+            db.add(InstalledApp(
+                device_id=device_id,
+                package_name=app
+            ))
+
+    db.commit()
+    db.close()
+
+    return {"status":"saved"}
+
+@app.get("/apps/{device_id}")
+def get_apps(device_id:str):
+
+    db = SessionLocal()
+
+    apps = db.query(InstalledApp).filter(
+        InstalledApp.device_id==device_id
+    ).all()
+
+    db.close()
+
+    return {
+        "apps":[a.package_name for a in apps]
     }
