@@ -476,7 +476,7 @@ from datetime import datetime, timedelta
 import json
 import requests
 import os
-from models import Detection, Incident
+from models import Detection, Incident, ParentDevice, DeviceCommand, AppUsage, ScreenLimit
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import firebase_admin
@@ -1051,3 +1051,92 @@ def command_history(device_id: str):
     db.close()
 
     return {"commands": result}
+
+@app.get("/usage/{device_id}")
+def get_usage(device_id: str):
+
+    db = SessionLocal()
+
+    usage = db.query(AppUsage).filter(
+        AppUsage.device_id == device_id
+    ).all()
+
+    db.close()
+
+    total_time = sum(u.duration_seconds for u in usage)
+
+    return {
+        "total_screen_time": total_time,
+        "apps": [
+            {
+                "package": u.package_name,
+                "duration": u.duration_seconds
+            }
+            for u in usage
+        ]
+    }
+    
+@app.get("/top-apps/{device_id}")
+def top_apps(device_id: str):
+
+    db = SessionLocal()
+
+    usage = db.query(AppUsage).filter(
+        AppUsage.device_id == device_id
+    ).all()
+
+    db.close()
+
+    app_time = {}
+
+    for u in usage:
+        app_time[u.package_name] = app_time.get(u.package_name, 0) + u.duration_seconds
+
+    sorted_apps = sorted(app_time.items(), key=lambda x: x[1], reverse=True)
+
+    return {
+        "top_apps": [
+            {"package": a, "duration": d}
+            for a, d in sorted_apps[:5]
+        ]
+    }
+@app.post("/set-limit")
+def set_limit(data: dict = Body(...)):
+
+    device_id = data.get("device_id")
+    limit = data.get("limit")
+
+    db: Session = SessionLocal()
+
+    existing = db.query(ScreenLimit).filter(
+        ScreenLimit.device_id == device_id
+    ).first()
+
+    if existing:
+        existing.daily_limit_minutes = limit
+    else:
+        db.add(ScreenLimit(
+            device_id=device_id,
+            daily_limit_minutes=limit
+        ))
+
+    db.commit()
+    db.close()
+
+    return {"status": "limit set"}
+
+@app.get("/limit/{device_id}")
+def get_limit(device_id: str):
+
+    db: Session = SessionLocal()
+
+    limit = db.query(ScreenLimit).filter(
+        ScreenLimit.device_id == device_id
+    ).first()
+
+    db.close()
+
+    if not limit:
+        return {"limit": None}
+
+    return {"limit": limit.daily_limit_minutes}

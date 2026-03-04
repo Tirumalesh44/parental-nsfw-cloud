@@ -120,3 +120,10 @@ class DeviceCommand(Base):
     created_at = Column(String, nullable=False)
 
     executed_at = Column(String, nullable=True)
+    
+class ScreenLimit(Base):
+    __tablename__ = "screen_limits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String, index=True)
+    daily_limit_minutes = Column(Integer)
