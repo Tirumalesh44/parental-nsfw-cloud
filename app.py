@@ -1182,11 +1182,12 @@ def get_blocked_apps(device_id: str):
         "blocked_apps": [a.package_name for a in apps]
     }
     
+
 @app.post("/installed-apps")
 def save_apps(data: dict = Body(...)):
 
     device_id = data.get("device_id")
-    apps = data.get("apps")
+    apps = data.get("apps", [])
 
     db = SessionLocal()
 
@@ -1195,12 +1196,16 @@ def save_apps(data: dict = Body(...)):
         package = app.get("package")
         name = app.get("name")
 
-        exists = db.query(InstalledApp).filter(
+        if not package:
+            continue
+
+        existing = db.query(InstalledApp).filter(
             InstalledApp.device_id == device_id,
             InstalledApp.package_name == package
         ).first()
 
-        if not exists:
+        if not existing:
+
             db.add(
                 InstalledApp(
                     device_id=device_id,
@@ -1212,8 +1217,7 @@ def save_apps(data: dict = Body(...)):
     db.commit()
     db.close()
 
-    return {"status":"saved"}
-
+    return {"status": "saved"}
 @app.get("/apps/{device_id}")
 def get_apps(device_id: str):
 
@@ -1226,10 +1230,10 @@ def get_apps(device_id: str):
     db.close()
 
     return {
-        "apps":[
+        "apps": [
             {
-                "package":a.package_name,
-                "name":a.app_name
+                "package": a.package_name,
+                "name": a.app_name
             }
             for a in apps
         ]
