@@ -476,7 +476,7 @@ from datetime import datetime, timedelta
 import json
 import requests
 import os
-from models import Detection, Incident, ParentDevice, DeviceCommand, AppUsage, ScreenLimit
+from models import Detection, Incident, ParentDevice, DeviceCommand, AppUsage, ScreenLimit,BlockedApp
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import firebase_admin
@@ -1140,3 +1140,42 @@ def get_limit(device_id: str):
         return {"limit": None}
 
     return {"limit": limit.daily_limit_minutes}
+
+@app.post("/block-app")
+def block_app(data: dict = Body(...)):
+
+    device_id = data.get("device_id")
+    package_name = data.get("package_name")
+
+    db = SessionLocal()
+
+    existing = db.query(BlockedApp).filter(
+        BlockedApp.device_id == device_id,
+        BlockedApp.package_name == package_name
+    ).first()
+
+    if not existing:
+        db.add(BlockedApp(
+            device_id=device_id,
+            package_name=package_name
+        ))
+
+    db.commit()
+    db.close()
+
+    return {"status": "blocked"}
+
+@app.get("/blocked-apps/{device_id}")
+def get_blocked_apps(device_id: str):
+
+    db = SessionLocal()
+
+    apps = db.query(BlockedApp).filter(
+        BlockedApp.device_id == device_id
+    ).all()
+
+    db.close()
+
+    return {
+        "blocked_apps": [a.package_name for a in apps]
+    }

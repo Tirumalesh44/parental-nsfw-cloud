@@ -127,3 +127,10 @@ class ScreenLimit(Base):
     id = Column(Integer, primary_key=True, index=True)
     device_id = Column(String, index=True)
     daily_limit_minutes = Column(Integer)
+
+class BlockedApp(Base):
+    __tablename__ = "blocked_apps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String, index=True)
+    package_name = Column(String)
