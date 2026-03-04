@@ -481,6 +481,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import firebase_admin
 from firebase_admin import credentials, messaging
+from fastapi import Body
+
 
 
 
@@ -1181,35 +1183,34 @@ def get_blocked_apps(device_id: str):
     }
     
 @app.post("/installed-apps")
-def save_apps(data: dict = Body(...)):
+def save_installed_apps(data: dict = Body(...)):
 
     device_id = data.get("device_id")
     apps = data.get("apps")
 
-    db = SessionLocal()
+    db: Session = SessionLocal()
 
-    for app in apps:
+    for package in apps:
 
-        package = app.get("package")
-        name = app.get("name")
-
-        exists = db.query(InstalledApp).filter(
+        existing = db.query(InstalledApp).filter(
             InstalledApp.device_id == device_id,
             InstalledApp.package_name == package
         ).first()
 
-        if not exists:
+        if not existing:
 
-            db.add(InstalledApp(
-                device_id=device_id,
-                package_name=package,
-                app_name=name
-            ))
+            db.add(
+                InstalledApp(
+                    device_id=device_id,
+                    package_name=package
+                )
+            )
 
     db.commit()
     db.close()
 
-    return {"status":"saved"}
+    return {"status": "saved"}
+
 @app.get("/apps/{device_id}")
 def get_apps(device_id:str):
 
