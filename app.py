@@ -1024,3 +1024,30 @@ def dashboard_overview(device_id: str):
         "total_screen_time_seconds": total_screen_time,
         "incidents_today": incidents_today
     }
+    
+@app.get("/commands/history/{device_id}")
+def command_history(device_id: str):
+
+    db = SessionLocal()
+
+    commands = (
+        db.query(DeviceCommand)
+        .filter(DeviceCommand.device_id == device_id)
+        .order_by(DeviceCommand.created_at.desc())
+        .all()
+    )
+
+    result = []
+
+    for cmd in commands:
+        result.append({
+            "id": cmd.id,
+            "command_type": cmd.command_type,
+            "status": cmd.status,
+            "created_at": cmd.created_at,
+            "executed_at": cmd.executed_at
+        })
+
+    db.close()
+
+    return {"commands": result}
