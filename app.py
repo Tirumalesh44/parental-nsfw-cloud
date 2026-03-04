@@ -1193,24 +1193,21 @@ def save_apps(data: dict = Body(...)):
 
     for app in apps:
 
-        package = app.get("package")
-        name = app.get("name")
+        package_name = app.get("package")
+        app_name = app.get("name")
 
-        if not package:
-            continue
-
-        existing = db.query(InstalledApp).filter(
+        exists = db.query(InstalledApp).filter(
             InstalledApp.device_id == device_id,
-            InstalledApp.package_name == package
+            InstalledApp.package_name == package_name
         ).first()
 
-        if not existing:
+        if not exists:
 
             db.add(
                 InstalledApp(
                     device_id=device_id,
-                    package_name=package,
-                    app_name=name
+                    package_name=package_name,
+                    app_name=app_name
                 )
             )
 
@@ -1218,26 +1215,37 @@ def save_apps(data: dict = Body(...)):
     db.close()
 
     return {"status": "saved"}
+
+
 @app.get("/apps/{device_id}")
 def get_apps(device_id: str):
 
     db = SessionLocal()
 
-    apps = db.query(InstalledApp).filter(
+    installed = db.query(InstalledApp).filter(
         InstalledApp.device_id == device_id
     ).all()
 
+    blocked = db.query(BlockedApp).filter(
+        BlockedApp.device_id == device_id
+    ).all()
+
+    blocked_set = {b.package_name for b in blocked}
+
+    result = []
+
+    for app in installed:
+
+        result.append({
+            "name": app.app_name,
+            "package": app.package_name,
+            "blocked": app.package_name in blocked_set
+        })
+
     db.close()
 
-    return {
-        "apps": [
-            {
-                "package": a.package_name,
-                "name": a.app_name
-            }
-            for a in apps
-        ]
-    }
+    return {"apps": result}
+
     
 @app.post("/unblock-app")
 def unblock_app(data: dict = Body(...)):

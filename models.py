@@ -136,7 +136,6 @@ class BlockedApp(Base):
     package_name = Column(String)
 
 class InstalledApp(Base):
-
     __tablename__ = "installed_apps"
 
     id = Column(Integer, primary_key=True, index=True)
