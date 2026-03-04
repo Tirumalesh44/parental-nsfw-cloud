@@ -1276,32 +1276,40 @@ def unblock_app(data: dict = Body(...)):
     db.close()
 
     return {"status":"unblocked"}
-from sqlalchemy import func
-@app.get("/usage-summary/{device_id}")
-def usage_summary(device_id: str):
+
+from datetime import datetime
+
+@app.post("/app-usage")
+def store_app_usage(data: dict = Body(...)):
+
+    device_id = data.get("device_id")
+    package_name = data.get("package_name")
+    duration_seconds = data.get("duration_seconds")
+
+    # convert timestamps safely
+    started_at = data.get("started_at")
+    ended_at = data.get("ended_at")
+
+    if started_at:
+        started_at = datetime.fromtimestamp(int(started_at)/1000)
+
+    if ended_at:
+        ended_at = datetime.fromtimestamp(int(ended_at)/1000)
 
     db = SessionLocal()
 
-    rows = (
-        db.query(
-            AppUsage.package_name,
-            func.sum(AppUsage.duration_seconds).label("total_seconds")
-        )
-        .filter(AppUsage.device_id == device_id)
-        .group_by(AppUsage.package_name)
-        .all()
+    usage = AppUsage(
+        device_id=device_id,
+        package_name=package_name,
+        started_at=started_at,
+        ended_at=ended_at,
+        duration_seconds=duration_seconds
     )
 
-    apps = []
-
-    for r in rows:
-        apps.append({
-            "package_name": r.package_name,
-            "total_seconds": r.total_seconds
-        })
-
+    db.add(usage)
+    db.commit()
     db.close()
 
-    return {"apps": apps}
+    return {"status": "usage_saved"}
 
 Base.metadata.create_all(bind=engine)
