@@ -488,7 +488,7 @@ from fastapi import Body
 
 app = FastAPI(title="Parental Control Backend")
 
-Base.metadata.create_all(bind=engine)
+
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 
@@ -1185,37 +1185,49 @@ def get_blocked_apps(device_id: str):
 
 @app.post("/installed-apps")
 def save_apps(data: dict = Body(...)):
-
     device_id = data.get("device_id")
     apps = data.get("apps", [])
 
+    print(f"Received installed apps for device {device_id} → {len(apps)} apps")
+
+    if not device_id or not apps:
+        print("ERROR: Missing device_id or apps")
+        return {"status": "error", "message": "missing data"}
+
     db = SessionLocal()
 
-    for app in apps:
+    try:
+        for app in apps:
+            package_name = app.get("package")
+            app_name = app.get("name")
 
-        package_name = app.get("package")
-        app_name = app.get("name")
+            if not package_name:
+                continue
 
-        exists = db.query(InstalledApp).filter(
-            InstalledApp.device_id == device_id,
-            InstalledApp.package_name == package_name
-        ).first()
+            exists = db.query(InstalledApp).filter(
+                InstalledApp.device_id == device_id,
+                InstalledApp.package_name == package_name
+            ).first()
 
-        if not exists:
-
-            db.add(
-                InstalledApp(
+            if not exists:
+                new_app = InstalledApp(
                     device_id=device_id,
                     package_name=package_name,
-                    app_name=app_name
+                    app_name=app_name or package_name
                 )
-            )
+                db.add(new_app)
 
-    db.commit()
-    db.close()
+        db.commit()
+        print(f"✅ Saved {len(apps)} installed apps for device {device_id}")
+        return {"status": "saved", "count": len(apps)}
 
-    return {"status": "saved"}
+    except Exception as e:
+        db.rollback()
+        print(f"❌ DATABASE ERROR while saving apps: {str(e)}")
+        return {"status": "error", "message": str(e)}
 
+    finally:
+        db.close()
 
 @app.get("/apps/{device_id}")
 def get_apps(device_id: str):
@@ -1264,3 +1276,7 @@ def unblock_app(data: dict = Body(...)):
     db.close()
 
     return {"status":"unblocked"}
+
+
+
+Base.metadata.create_all(bind=engine)
