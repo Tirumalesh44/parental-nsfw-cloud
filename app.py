@@ -510,37 +510,49 @@ from models import AppUsage
 
 @app.post("/app-usage")
 def store_app_usage(data: dict = Body(...)):
+
     device_id = data.get("device_id")
     package_name = data.get("package_name")
     started_at = data.get("started_at")
     ended_at = data.get("ended_at")
     duration_seconds = data.get("duration_seconds")
 
+    if not device_id or not package_name or not started_at or not ended_at or duration_seconds is None:
+        return {"error": "missing fields"}
+
     db = SessionLocal()
 
-    today = datetime.utcnow().date().isoformat()
+    try:
+        today = started_at[:10]
 
-    existing = db.query(AppUsage).filter(
-        AppUsage.device_id == device_id,
-        AppUsage.package_name == package_name,
-        AppUsage.started_at.startswith(today)
-    ).first()
+        existing = db.query(AppUsage).filter(
+            AppUsage.device_id == device_id,
+            AppUsage.package_name == package_name,
+            AppUsage.started_at.startswith(today)
+        ).first()
 
-    if existing:
-        existing.duration_seconds += duration_seconds
-        existing.ended_at = ended_at
-    else:
-        usage = AppUsage(
-            device_id=device_id,
-            package_name=package_name,
-            started_at=started_at,
-            ended_at=ended_at,
-            duration_seconds=duration_seconds
-        )
-        db.add(usage)
+        if existing:
+            existing.duration_seconds += int(duration_seconds)
+            existing.ended_at = ended_at
+        else:
+            usage = AppUsage(
+                device_id=device_id,
+                package_name=package_name,
+                started_at=started_at,
+                ended_at=ended_at,
+                duration_seconds=int(duration_seconds)
+            )
+            db.add(usage)
 
-    db.commit()
-    db.close()
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        print("APP USAGE ERROR:", e)
+        return {"error": str(e)}
+
+    finally:
+        db.close()
 
     return {"status": "usage_saved"}
 
@@ -828,37 +840,45 @@ def usage_summary(device_id: str):
 
     db = SessionLocal()
 
-    today_start = datetime.utcnow().replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    try:
+        rows = db.query(AppUsage).filter(
+            AppUsage.device_id == device_id
+        ).all()
 
-    rows = (
-        db.query(
-            AppUsage.package_name,
-            func.sum(AppUsage.duration_seconds).label("total_seconds")
+        app_totals = {}
+
+        for r in rows:
+            if r.package_name not in app_totals:
+                app_totals[r.package_name] = 0
+
+            app_totals[r.package_name] += r.duration_seconds
+
+        sorted_apps = sorted(
+            app_totals.items(),
+            key=lambda x: x[1],
+            reverse=True
         )
-        .filter(AppUsage.device_id == device_id)
-        .filter(AppUsage.started_at >= today_start)
-        .group_by(AppUsage.package_name)
-        .order_by(func.sum(AppUsage.duration_seconds).desc())
-        .all()
-    )
 
-    total_screen_time = sum(r.total_seconds for r in rows)
+        apps = []
 
-    apps = []
+        for pkg, seconds in sorted_apps:
+            apps.append({
+                "package_name": pkg,
+                "total_seconds": int(seconds)
+            })
 
-    for r in rows:
-        apps.append({
-            "package_name": r.package_name,
-            "total_seconds": int(r.total_seconds)
-        })
+        total_screen_time = sum(app_totals.values())
 
-    db.close()
+        return {
+            "total_screen_time": total_screen_time,
+            "apps": apps
+        }
 
-    return {
-        "total_screen_time": total_screen_time,
-        "apps": apps
-    }
+    except Exception as e:
+        print("USAGE SUMMARY ERROR:", e)
+        return {"error": str(e)}
+
+    finally:
+        db.close()
 
 Base.metadata.create_all(bind=engine)
