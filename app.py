@@ -609,22 +609,38 @@ def get_usage(device_id: str):
 
     db = SessionLocal()
 
-    usage = db.query(AppUsage).filter(
+    rows = db.query(AppUsage).filter(
         AppUsage.device_id == device_id
     ).all()
 
     db.close()
 
-    total_time = sum(u.duration_seconds for u in usage)
+    # Ignore system apps
+    ignore_packages = [
+        "com.android.systemui",
+        "com.google.android.apps.nexuslauncher",
+        "com.android.launcher"
+    ]
+
+    app_totals = {}
+
+    for r in rows:
+
+        if r.package_name in ignore_packages:
+            continue
+
+        app_totals[r.package_name] = app_totals.get(r.package_name, 0) + r.duration_seconds
+
+    total_time = sum(app_totals.values())
 
     return {
         "total_screen_time": total_time,
         "apps": [
             {
-                "package": u.package_name,
-                "duration": u.duration_seconds
+                "package": pkg,
+                "duration": duration
             }
-            for u in usage
+            for pkg, duration in app_totals.items()
         ]
     }
     
@@ -837,41 +853,52 @@ def usage_summary(device_id: str):
     db = SessionLocal()
 
     try:
+
+        today = datetime.utcnow().date()
+
         rows = db.query(AppUsage).filter(
             AppUsage.device_id == device_id
         ).all()
 
-        ignore_packages = [
+        ignore = [
             "com.android.systemui",
             "com.google.android.apps.nexuslauncher",
-            "com.android.launcher",
-            "com.android.settings"
+            "com.android.launcher"
         ]
 
         app_totals = {}
 
         for r in rows:
 
-            if r.package_name in ignore_packages:
+            # convert millisecond timestamp to date
+            ts = datetime.utcfromtimestamp(int(r.started_at)/1000)
+
+            if ts.date() != today:
                 continue
 
-            app_totals[r.package_name] = app_totals.get(r.package_name, 0) + r.duration_seconds
+            if r.package_name in ignore:
+                continue
 
-        sorted_apps = sorted(app_totals.items(), key=lambda x: x[1], reverse=True)
+            app_totals[r.package_name] = app_totals.get(
+                r.package_name,0
+            ) + r.duration_seconds
+
+
+        sorted_apps = sorted(
+            app_totals.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
 
         apps = [
-            {"package_name": pkg, "total_seconds": sec}
-            for pkg, sec in sorted_apps
+            {"package_name":pkg,"total_seconds":sec}
+            for pkg,sec in sorted_apps
         ]
 
         return {
-            "total_screen_time": sum(app_totals.values()),
-            "apps": apps
+            "total_screen_time":sum(app_totals.values()),
+            "apps":apps
         }
-
-    except Exception as e:
-        print("USAGE SUMMARY ERROR:", e)
-        return {"error": str(e)}
 
     finally:
         db.close()
