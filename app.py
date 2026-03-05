@@ -863,7 +863,8 @@ def usage_summary(device_id: str):
         ignore = [
             "com.android.systemui",
             "com.google.android.apps.nexuslauncher",
-            "com.android.launcher"
+            "com.android.launcher",
+            "com.example.childcontrol"
         ]
 
         app_totals = {}
@@ -891,18 +892,12 @@ def usage_summary(device_id: str):
                 r.package_name, 0
             ) + (r.duration_seconds or 0)
 
-        sorted_apps = sorted(
-            app_totals.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )
-
         apps = [
             {
                 "package_name": pkg,
                 "total_seconds": sec
             }
-            for pkg, sec in sorted_apps
+            for pkg, sec in app_totals.items()
         ]
 
         return {
