@@ -837,11 +837,8 @@ def usage_summary(device_id: str):
     db = SessionLocal()
 
     try:
-        today = datetime.utcnow().date().isoformat()
-
         rows = db.query(AppUsage).filter(
-            AppUsage.device_id == device_id,
-            AppUsage.started_at.startswith(today)
+            AppUsage.device_id == device_id
         ).all()
 
         ignore_packages = [
@@ -854,6 +851,7 @@ def usage_summary(device_id: str):
         app_totals = {}
 
         for r in rows:
+
             if r.package_name in ignore_packages:
                 continue
 
