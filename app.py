@@ -296,6 +296,7 @@ def parent_summary(device_id: str):
 
 
 @app.get("/")
+@app.head("/")
 def health():
     return {"status": "Backend Running"}
 
@@ -854,70 +855,74 @@ def usage_summary(device_id: str):
 
     db = SessionLocal()
 
-    try:
+    today = datetime.utcnow().date()
 
-        today = datetime.utcnow().date()
+    ignore = [
+        "com.android.systemui",
+        "com.google.android.apps.nexuslauncher",
+        "com.android.launcher"
+    ]
 
-        rows = db.query(AppUsage).filter(
-            AppUsage.device_id == device_id
-        ).all()
+    app_totals = {}
 
-        ignore = [
-            "com.android.systemui",
-            "com.google.android.apps.nexuslauncher",
-            "com.android.launcher"
-        ]
+    rows = db.query(AppUsage).filter(
+        AppUsage.device_id == device_id
+    ).all()
 
-        app_totals = {}
+    for r in rows:
 
-        for r in rows:
+        ts = None
 
-            ts = None
+        # ---------- Parse timestamp safely ----------
+        try:
 
-            try:
-                # Case 1: timestamp in milliseconds
-                ts = datetime.utcfromtimestamp(int(r.started_at) / 1000)
+            if isinstance(r.started_at, int):
+                ts = datetime.utcfromtimestamp(r.started_at / 1000)
 
-            except (ValueError, TypeError):
+            elif isinstance(r.started_at, str):
 
-                try:
-                    # Case 2: ISO datetime string
-                    ts = datetime.fromisoformat(
-                        str(r.started_at).replace("Z", "")
-                    )
-                except:
-                    continue
+                # remove Z if present
+                cleaned = r.started_at.replace("Z", "")
+                ts = datetime.fromisoformat(cleaned)
 
-            if ts.date() != today:
-                continue
+            elif isinstance(r.started_at, datetime):
+                ts = r.started_at
 
-            if r.package_name in ignore:
-                continue
+        except Exception as e:
+            print("Timestamp parse error:", r.started_at, e)
+            continue
 
-            app_totals[r.package_name] = app_totals.get(
-                r.package_name, 0
-            ) + (r.duration_seconds or 0)
+        # ---------- Filter today only ----------
+        if ts.date() != today:
+            continue
 
-        sorted_apps = sorted(
-            app_totals.items(),
-            key=lambda x: x[1],
-            reverse=True
+        # ---------- Ignore system apps ----------
+        if r.package_name in ignore:
+            continue
+
+        duration = r.duration_seconds or 0
+
+        app_totals[r.package_name] = (
+            app_totals.get(r.package_name, 0) + duration
         )
 
-        apps = [
+    db.close()
+
+    sorted_apps = sorted(
+        app_totals.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    return {
+        "total_screen_time": sum(app_totals.values()),
+        "apps": [
             {
                 "package_name": pkg,
                 "total_seconds": sec
             }
             for pkg, sec in sorted_apps
         ]
-
-        return {
-            "total_screen_time": sum(app_totals.values()),
-            "apps": apps
-        }
-
-    finally:
-        db.close()
+    }
         
 Base.metadata.create_all(bind=engine)
