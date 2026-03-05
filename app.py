@@ -11,7 +11,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, messaging
 
-
+from datetime import datetime
 
 
 app = FastAPI(title="Parental Control Backend")
@@ -871,7 +871,10 @@ def usage_summary(device_id: str):
         for r in rows:
 
             # convert millisecond timestamp to date
-            ts = datetime.utcfromtimestamp(int(r.started_at)/1000)
+            try:
+                ts = datetime.utcfromtimestamp(int(r.started_at) / 1000)
+            except:
+                ts = datetime.fromisoformat(r.started_at)
 
             if ts.date() != today:
                 continue
