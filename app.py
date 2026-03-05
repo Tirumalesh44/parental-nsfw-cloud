@@ -509,8 +509,8 @@ def store_app_usage(data: dict = Body(...)):
 
     device_id = data.get("device_id")
     package_name = data.get("package_name")
-    started_at = data.get("started_at")
-    ended_at = data.get("ended_at")
+    started_at = str(data.get("started_at"))
+    ended_at = str(data.get("ended_at"))
     duration_seconds = data.get("duration_seconds")
 
     if not device_id or not package_name or not started_at or not ended_at or duration_seconds is None:
@@ -545,7 +545,6 @@ def store_app_usage(data: dict = Body(...)):
     except Exception as e:
         db.rollback()
         print("APP USAGE ERROR:", e)
-        return {"error": str(e)}
 
     finally:
         db.close()
