@@ -63,11 +63,11 @@ class AppUsage(Base):
 
     device_id = Column(String, index=True, nullable=False)
 
-    package_name = Column(String, index=True, nullable=False)
+    package_name = Column(String, nullable=False)
 
-    started_at = Column(DateTime, index=True, nullable=False)
+    started_at = Column(String, index=True, nullable=False)
 
-    ended_at = Column(DateTime, nullable=False)
+    ended_at = Column(String, nullable=False)
 
     duration_seconds = Column(Integer, nullable=False)
 
