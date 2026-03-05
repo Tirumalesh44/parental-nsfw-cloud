@@ -556,25 +556,38 @@ def dashboard_overview(device_id: str):
 
     db = SessionLocal()
 
-    today = datetime.utcnow().date().isoformat()
-
-    usages = db.query(AppUsage).filter(
-        AppUsage.device_id == device_id,
-        AppUsage.started_at.startswith(today)
+    rows = db.query(AppUsage).filter(
+        AppUsage.device_id == device_id
     ).all()
 
-    total_screen_time = sum(u.duration_seconds for u in usages)
+    today = datetime.utcnow().date()
 
-    incidents_today = db.query(Incident).filter(
-        Incident.device_id == device_id,
-        Incident.started_at.startswith(today)
-    ).count()
+    total_seconds = 0
+
+    for r in rows:
+
+        try:
+            ts = datetime.utcfromtimestamp(int(r.started_at) / 1000)
+        except:
+            continue
+
+        if ts.date() != today:
+            continue
+
+        if r.package_name in [
+            "com.android.systemui",
+            "com.google.android.apps.nexuslauncher",
+            "com.example.childcontrol"
+        ]:
+            continue
+
+        total_seconds += r.duration_seconds
 
     db.close()
 
     return {
-        "total_screen_time_seconds": total_screen_time,
-        "incidents_today": incidents_today
+        "total_screen_time_seconds": total_seconds,
+        "incidents_today": 0
     }
     
 @app.get("/commands/history/{device_id}")
