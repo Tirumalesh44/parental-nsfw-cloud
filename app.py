@@ -842,7 +842,6 @@ def usage_summary(device_id: str):
     db = SessionLocal()
 
     try:
-
         today = datetime.utcnow().date().isoformat()
 
         rows = db.query(AppUsage).filter(
@@ -860,33 +859,20 @@ def usage_summary(device_id: str):
         app_totals = {}
 
         for r in rows:
-
             if r.package_name in ignore_packages:
                 continue
 
-            if r.package_name not in app_totals:
-                app_totals[r.package_name] = 0
+            app_totals[r.package_name] = app_totals.get(r.package_name, 0) + r.duration_seconds
 
-            app_totals[r.package_name] += r.duration_seconds
+        sorted_apps = sorted(app_totals.items(), key=lambda x: x[1], reverse=True)
 
-        sorted_apps = sorted(
-            app_totals.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )
-
-        apps = []
-
-        for pkg, seconds in sorted_apps:
-            apps.append({
-                "package_name": pkg,
-                "total_seconds": int(seconds)
-            })
-
-        total_screen_time = sum(app_totals.values())
+        apps = [
+            {"package_name": pkg, "total_seconds": sec}
+            for pkg, sec in sorted_apps
+        ]
 
         return {
-            "total_screen_time": total_screen_time,
+            "total_screen_time": sum(app_totals.values()),
             "apps": apps
         }
 
