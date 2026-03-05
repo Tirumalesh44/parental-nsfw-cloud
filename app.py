@@ -1,19 +1,15 @@
 
 #-------FOURTH------------#
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, Body
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
-from models import Base, Detection
+from models import Base, Detection, Incident, ParentDevice, DeviceCommand, AppUsage, ScreenLimit, BlockedApp, InstalledApp
 from datetime import datetime, timedelta
 import json
 import requests
 import os
-from models import Detection, Incident, ParentDevice, DeviceCommand, AppUsage, ScreenLimit,BlockedApp,InstalledApp
-from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
 import firebase_admin
 from firebase_admin import credentials, messaging
-from fastapi import Body
 
 
 
