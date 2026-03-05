@@ -11,7 +11,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, messaging
 
-from datetime import datetime
+
 
 
 app = FastAPI(title="Parental Control Backend")
@@ -296,7 +296,6 @@ def parent_summary(device_id: str):
 
 
 @app.get("/")
-@app.head("/")
 def health():
     return {"status": "Backend Running"}
 
@@ -848,81 +847,60 @@ def unblock_app(data: dict = Body(...)):
 
 
 
-from datetime import datetime
-
 @app.get("/usage-summary/{device_id}")
 def usage_summary(device_id: str):
 
     db = SessionLocal()
 
-    today = datetime.utcnow().date()
+    try:
 
-    ignore = [
-        "com.android.systemui",
-        "com.google.android.apps.nexuslauncher",
-        "com.android.launcher"
-    ]
+        today = datetime.utcnow().date()
 
-    app_totals = {}
+        rows = db.query(AppUsage).filter(
+            AppUsage.device_id == device_id
+        ).all()
 
-    rows = db.query(AppUsage).filter(
-        AppUsage.device_id == device_id
-    ).all()
+        ignore = [
+            "com.android.systemui",
+            "com.google.android.apps.nexuslauncher",
+            "com.android.launcher"
+        ]
 
-    for r in rows:
+        app_totals = {}
 
-        ts = None
+        for r in rows:
 
-        # ---------- Parse timestamp safely ----------
-        try:
+            # convert millisecond timestamp to date
+            ts = datetime.utcfromtimestamp(int(r.started_at)/1000)
 
-            if isinstance(r.started_at, int):
-                ts = datetime.utcfromtimestamp(r.started_at / 1000)
+            if ts.date() != today:
+                continue
 
-            elif isinstance(r.started_at, str):
+            if r.package_name in ignore:
+                continue
 
-                # remove Z if present
-                cleaned = r.started_at.replace("Z", "")
-                ts = datetime.fromisoformat(cleaned)
+            app_totals[r.package_name] = app_totals.get(
+                r.package_name,0
+            ) + r.duration_seconds
 
-            elif isinstance(r.started_at, datetime):
-                ts = r.started_at
 
-        except Exception as e:
-            print("Timestamp parse error:", r.started_at, e)
-            continue
-
-        # ---------- Filter today only ----------
-        if ts.date() != today:
-            continue
-
-        # ---------- Ignore system apps ----------
-        if r.package_name in ignore:
-            continue
-
-        duration = r.duration_seconds or 0
-
-        app_totals[r.package_name] = (
-            app_totals.get(r.package_name, 0) + duration
+        sorted_apps = sorted(
+            app_totals.items(),
+            key=lambda x: x[1],
+            reverse=True
         )
 
-    db.close()
-
-    sorted_apps = sorted(
-        app_totals.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    return {
-        "total_screen_time": sum(app_totals.values()),
-        "apps": [
-            {
-                "package_name": pkg,
-                "total_seconds": sec
-            }
-            for pkg, sec in sorted_apps
+        apps = [
+            {"package_name":pkg,"total_seconds":sec}
+            for pkg,sec in sorted_apps
         ]
-    }
+
+        return {
+            "total_screen_time":sum(app_totals.values()),
+            "apps":apps
+        }
+
+    finally:
+        db.close()
         
 Base.metadata.create_all(bind=engine)
