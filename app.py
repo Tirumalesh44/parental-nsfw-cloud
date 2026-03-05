@@ -847,6 +847,8 @@ def unblock_app(data: dict = Body(...)):
 
 
 
+from datetime import datetime
+
 @app.get("/usage-summary/{device_id}")
 def usage_summary(device_id: str):
 
@@ -870,11 +872,21 @@ def usage_summary(device_id: str):
 
         for r in rows:
 
-            # convert millisecond timestamp to date
+            ts = None
+
             try:
+                # Case 1: timestamp in milliseconds
                 ts = datetime.utcfromtimestamp(int(r.started_at) / 1000)
-            except:
-                ts = datetime.fromisoformat(r.started_at)
+
+            except (ValueError, TypeError):
+
+                try:
+                    # Case 2: ISO datetime string
+                    ts = datetime.fromisoformat(
+                        str(r.started_at).replace("Z", "")
+                    )
+                except:
+                    continue
 
             if ts.date() != today:
                 continue
@@ -883,9 +895,8 @@ def usage_summary(device_id: str):
                 continue
 
             app_totals[r.package_name] = app_totals.get(
-                r.package_name,0
-            ) + r.duration_seconds
-
+                r.package_name, 0
+            ) + (r.duration_seconds or 0)
 
         sorted_apps = sorted(
             app_totals.items(),
@@ -894,13 +905,16 @@ def usage_summary(device_id: str):
         )
 
         apps = [
-            {"package_name":pkg,"total_seconds":sec}
-            for pkg,sec in sorted_apps
+            {
+                "package_name": pkg,
+                "total_seconds": sec
+            }
+            for pkg, sec in sorted_apps
         ]
 
         return {
-            "total_screen_time":sum(app_totals.values()),
-            "apps":apps
+            "total_screen_time": sum(app_totals.values()),
+            "apps": apps
         }
 
     finally:
