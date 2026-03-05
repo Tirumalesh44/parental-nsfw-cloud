@@ -832,8 +832,9 @@ def unblock_app(data: dict = Body(...)):
 
     return {"status":"unblocked"}
 
-from sqlalchemy import func
-from datetime import datetime, timedelta
+
+
+
 
 @app.get("/usage-summary/{device_id}")
 def usage_summary(device_id: str):
@@ -841,13 +842,28 @@ def usage_summary(device_id: str):
     db = SessionLocal()
 
     try:
+
+        today = datetime.utcnow().date().isoformat()
+
         rows = db.query(AppUsage).filter(
-            AppUsage.device_id == device_id
+            AppUsage.device_id == device_id,
+            AppUsage.started_at.startswith(today)
         ).all()
+
+        ignore_packages = [
+            "com.android.systemui",
+            "com.google.android.apps.nexuslauncher",
+            "com.android.launcher",
+            "com.android.settings"
+        ]
 
         app_totals = {}
 
         for r in rows:
+
+            if r.package_name in ignore_packages:
+                continue
+
             if r.package_name not in app_totals:
                 app_totals[r.package_name] = 0
 
@@ -880,5 +896,5 @@ def usage_summary(device_id: str):
 
     finally:
         db.close()
-
+        
 Base.metadata.create_all(bind=engine)
