@@ -617,18 +617,22 @@ def command_history(device_id: str):
 
     return {"commands": result}
 
+
+
 @app.get("/usage/{device_id}")
 def get_usage(device_id: str):
 
     db = SessionLocal()
 
+    today = datetime.utcnow().date()
+
     rows = db.query(AppUsage).filter(
-        AppUsage.device_id == device_id
+        AppUsage.device_id == device_id,
+        AppUsage.started_at >= today
     ).all()
 
     db.close()
 
-    # Ignore system apps
     ignore_packages = [
         "com.android.systemui",
         "com.google.android.apps.nexuslauncher",
@@ -657,28 +661,51 @@ def get_usage(device_id: str):
         ]
     }
     
+
 @app.get("/top-apps/{device_id}")
 def top_apps(device_id: str):
 
     db = SessionLocal()
 
+    today = datetime.utcnow().date()
+
     usage = db.query(AppUsage).filter(
-        AppUsage.device_id == device_id
+        AppUsage.device_id == device_id,
+        AppUsage.started_at >= today
     ).all()
 
     db.close()
 
+    ignore_packages = [
+        "com.android.systemui",
+        "com.google.android.apps.nexuslauncher",
+        "com.android.launcher",
+        "com.android.launcher3",
+        "com.example.childcontrol"
+    ]
+
     app_time = {}
 
     for u in usage:
+
+        if u.package_name in ignore_packages:
+            continue
+
         app_time[u.package_name] = app_time.get(u.package_name, 0) + u.duration_seconds
 
-    sorted_apps = sorted(app_time.items(), key=lambda x: x[1], reverse=True)
+    sorted_apps = sorted(
+        app_time.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
 
     return {
         "top_apps": [
-            {"package": a, "duration": d}
-            for a, d in sorted_apps[:5]
+            {
+                "package": pkg,
+                "duration_seconds": duration
+            }
+            for pkg, duration in sorted_apps[:5]
         ]
     }
 @app.post("/set-limit")
