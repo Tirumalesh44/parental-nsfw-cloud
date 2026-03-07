@@ -620,11 +620,19 @@ def command_history(device_id: str):
 
 
 @app.get("/usage/{device_id}")
+from datetime import datetime
+
+@app.get("/usage/{device_id}")
 def get_usage(device_id: str):
 
     db = SessionLocal()
 
-    today = datetime.utcnow().date()
+    today = datetime.utcnow().replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0
+    )
 
     rows = db.query(AppUsage).filter(
         AppUsage.device_id == device_id,
