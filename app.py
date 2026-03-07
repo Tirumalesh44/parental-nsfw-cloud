@@ -619,24 +619,20 @@ def command_history(device_id: str):
 
 
 
-@app.get("/usage/{device_id}")
-from datetime import datetime
 
 @app.get("/usage/{device_id}")
 def get_usage(device_id: str):
 
     db = SessionLocal()
 
-    today = datetime.utcnow().replace(
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0
-    )
+    # start of today in milliseconds
+    today_start = int(datetime.utcnow().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).timestamp() * 1000)
 
     rows = db.query(AppUsage).filter(
         AppUsage.device_id == device_id,
-        AppUsage.started_at >= today
+        AppUsage.started_at >= today_start
     ).all()
 
     db.close()
@@ -644,7 +640,7 @@ def get_usage(device_id: str):
     ignore_packages = [
         "com.android.systemui",
         "com.google.android.apps.nexuslauncher",
-        "com.android.launcher"
+        "com.android.launcher3"
     ]
 
     app_totals = {}
@@ -670,16 +666,20 @@ def get_usage(device_id: str):
     }
     
 
+from datetime import datetime
+
 @app.get("/top-apps/{device_id}")
 def top_apps(device_id: str):
 
     db = SessionLocal()
 
-    today = datetime.utcnow().date()
+    today_start = int(datetime.utcnow().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).timestamp() * 1000)
 
     usage = db.query(AppUsage).filter(
         AppUsage.device_id == device_id,
-        AppUsage.started_at >= today
+        AppUsage.started_at >= today_start
     ).all()
 
     db.close()
@@ -687,9 +687,7 @@ def top_apps(device_id: str):
     ignore_packages = [
         "com.android.systemui",
         "com.google.android.apps.nexuslauncher",
-        "com.android.launcher",
-        "com.android.launcher3",
-        "com.example.childcontrol"
+        "com.android.launcher3"
     ]
 
     app_time = {}
@@ -701,21 +699,15 @@ def top_apps(device_id: str):
 
         app_time[u.package_name] = app_time.get(u.package_name, 0) + u.duration_seconds
 
-    sorted_apps = sorted(
-        app_time.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
+    sorted_apps = sorted(app_time.items(), key=lambda x: x[1], reverse=True)
 
     return {
         "top_apps": [
-            {
-                "package": pkg,
-                "duration_seconds": duration
-            }
-            for pkg, duration in sorted_apps[:5]
+            {"package": a, "duration": d}
+            for a, d in sorted_apps[:5]
         ]
     }
+    
 @app.post("/set-limit")
 def set_limit(data: dict = Body(...)):
 
