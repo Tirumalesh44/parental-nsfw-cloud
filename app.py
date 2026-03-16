@@ -625,14 +625,8 @@ def get_usage(device_id: str):
 
     db = SessionLocal()
 
-    # start of today in milliseconds
-    today_start = int(datetime.utcnow().replace(
-        hour=0, minute=0, second=0, microsecond=0
-    ).timestamp() * 1000)
-
     rows = db.query(AppUsage).filter(
-        AppUsage.device_id == device_id,
-        AppUsage.started_at >= today_start
+        AppUsage.device_id == device_id
     ).all()
 
     db.close()
