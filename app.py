@@ -324,44 +324,56 @@ def get_incidents(device_id: str):
 
     db: Session = SessionLocal()
 
-    incidents = (
-        db.query(Incident)
-        .filter(Incident.device_id == device_id)
-        .order_by(Incident.started_at.desc())
-        .all()
-    )
+    try:
+        incidents = (
+            db.query(Incident)
+            .filter(Incident.device_id == device_id)
+            .order_by(Incident.started_at.desc())
+            .all()
+        )
 
-    now = datetime.utcnow()
+        now = datetime.utcnow()
+        result = []
 
-    result = []
+        for inc in incidents:
 
-    for inc in incidents:
+            try:
+                # ✅ SAFE PARSING
+                start = datetime.fromisoformat(inc.started_at) if inc.started_at else None
 
-        if inc.ended_at:
-            duration = (
-                datetime.fromisoformat(inc.ended_at) -
-                datetime.fromisoformat(inc.started_at)
-            ).total_seconds()
-        else:
-            duration = (
-                now -
-                datetime.fromisoformat(inc.started_at)
-            ).total_seconds()
+                if not start:
+                    continue  # skip bad data
 
-        result.append({
-            "started_at": inc.started_at,
-            "ended_at": inc.ended_at,
-            "peak_risk": round(inc.peak_risk, 2),
-            "status": inc.status,
-            "duration_seconds": int(duration)
-        })
+                if inc.ended_at:
+                    end = datetime.fromisoformat(inc.ended_at)
+                    duration = (end - start).total_seconds()
+                else:
+                    duration = (now - start).total_seconds()
 
-    db.close()
+            except Exception as e:
+                print("INCIDENT PARSE ERROR:", e)
+                continue  # skip broken rows
 
-    return {
-        "incident_count": len(result),
-        "incidents": result
-    }
+            result.append({
+                "started_at": inc.started_at,
+                "ended_at": inc.ended_at,
+                "peak_risk": round(inc.peak_risk, 2) if inc.peak_risk else 0,
+                "status": inc.status,
+                "duration_seconds": int(duration)
+            })
+
+        return {
+            "incident_count": len(result),
+            "incidents": result
+        }
+
+    except Exception as e:
+        import traceback
+        print("INCIDENT API ERROR:", traceback.format_exc())
+        return {"error": str(e)}
+
+    finally:
+        db.close()
     
 ## parent api 
 from sqlalchemy.orm import Session
