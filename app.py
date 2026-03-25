@@ -102,32 +102,30 @@ async def analyze_frame(
 # =====================================
 # ACTIVE INCIDENT (WINDOW BASED)
 # =====================================
-
 @app.get("/active/{device_id}")
 def active_status(device_id: str):
 
-    db: Session = SessionLocal()
+    try:
+        db: Session = SessionLocal()
 
-    now = datetime.utcnow()
-    window_start = now - timedelta(seconds=20)
-
-    recent_detections = (
-        db.query(Detection)
-        .filter(
-            Detection.device_id == device_id,
-            Detection.timestamp >= window_start.isoformat()
+        recent_detections = (
+            db.query(Detection)
+            .filter(Detection.device_id == device_id)
+            .all()
         )
-        .all()
-    )
 
-    db.close()
+        active = len(recent_detections) >= 2
 
-    active = len(recent_detections) >= 2
+        return {
+            "active": active,
+            "recent_detections": len(recent_detections)
+        }
 
-    return {
-        "active": active,
-        "recent_detections": len(recent_detections)
-    }
+    except Exception as e:
+        return {"error": str(e)}
+
+    finally:
+        db.close()
 
 
 # =====================================
