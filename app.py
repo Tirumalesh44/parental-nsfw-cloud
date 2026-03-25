@@ -942,4 +942,3 @@ def usage_summary(device_id: str):
     finally:
         db.close()
         
-Base.metadata.create_all(bind=engine)
