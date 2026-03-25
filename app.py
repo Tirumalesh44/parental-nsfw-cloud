@@ -14,7 +14,7 @@ from firebase_admin import credentials, messaging
 
 
 
-port = int(os.environ.get("PORT", 10000))
+
 
 app = FastAPI(title="Parental Control Backend")
 
