@@ -105,9 +105,9 @@ async def analyze_frame(
 @app.get("/active/{device_id}")
 def active_status(device_id: str):
 
-    try:
-        db: Session = SessionLocal()
+    db: Session = SessionLocal()   # ✅ moved outside try (important)
 
+    try:
         recent_detections = (
             db.query(Detection)
             .filter(Detection.device_id == device_id)
@@ -122,10 +122,12 @@ def active_status(device_id: str):
         }
 
     except Exception as e:
+        import traceback
+        print("ACTIVE ERROR:", traceback.format_exc())  # ✅ real debug
         return {"error": str(e)}
 
     finally:
-        db.close()
+        db.close()   # ✅ always safe now
 
 
 # =====================================
@@ -278,19 +280,26 @@ def parent_summary(device_id: str):
 
     db: Session = SessionLocal()
 
-    detections = db.query(Detection).filter(
-        Detection.device_id == device_id
-    ).all()
+    try:
+        detections = db.query(Detection).filter(
+            Detection.device_id == device_id
+        ).all()
 
-    db.close()
+        total_bad_frames = len(detections)
+        estimated_watch_time_seconds = total_bad_frames * 5
 
-    total_bad_frames = len(detections)
-    estimated_watch_time_seconds = total_bad_frames * 5
+        return {
+            "total_bad_frames": total_bad_frames,
+            "estimated_watch_time_seconds": estimated_watch_time_seconds
+        }
 
-    return {
-        "total_bad_frames": total_bad_frames,
-        "estimated_watch_time_seconds": estimated_watch_time_seconds
-    }
+    except Exception as e:
+        import traceback
+        print("SUMMARY ERROR:", traceback.format_exc())
+        return {"error": str(e)}
+
+    finally:
+        db.close()
 
 
 @app.get("/")
